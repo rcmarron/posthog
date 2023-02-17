@@ -39,7 +39,6 @@ export type ServerInstance = {
     piscina: Piscina
     queue: IngestionConsumer | null
     mmdb?: ReaderModel
-    mmdbUpdateJob?: schedule.Job
     stop: () => Promise<void>
 }
 
@@ -102,9 +101,11 @@ export async function startPluginsServer(
 
     let lastActivityCheck: NodeJS.Timeout | undefined
     let stopEventLoopMetrics: (() => void) | undefined
+    let mmdbUpdateJob: schedule.Job | undefined
 
     let shuttingDown = false
     async function closeJobs(): Promise<void> {
+        mmdbUpdateJob?.cancel()
         shuttingDown = true
         status.info('💤', ' Shutting down gracefully...')
         lastActivityCheck && clearInterval(lastActivityCheck)
@@ -217,7 +218,7 @@ export async function startPluginsServer(
 
         if (!serverConfig.DISABLE_MMDB) {
             serverInstance.mmdb = (await prepareMmdb(serverInstance)) ?? undefined
-            serverInstance.mmdbUpdateJob = schedule.scheduleJob(
+            mmdbUpdateJob = schedule.scheduleJob(
                 '0 */4 * * *',
                 async () => await performMmdbStalenessCheck(serverInstance)
             )
